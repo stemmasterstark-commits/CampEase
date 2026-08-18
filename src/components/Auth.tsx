@@ -20,7 +20,7 @@ export default function Auth() {
             hd: 'nitc.ac.in',
             prompt: 'select_account',
           },
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
