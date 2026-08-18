@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRScannerProps {
   userId?: string;
@@ -10,61 +10,50 @@ interface QRScannerProps {
 }
 
 export default function QRScanner({ userId, onScanSuccess, onRideStarted }: QRScannerProps) {
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [hasPermission, setHasPermission] = useState<boolean>(false);
-
-  const startScanner = () => {
-    if (scannerRef.current) return;
-
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader',
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      false
-    );
-
-    scannerRef.current = scanner;
-
-    scanner.render(
-      (decodedText) => {
-        scanner.clear();
-        if (onScanSuccess) onScanSuccess(decodedText);
-        if (onRideStarted) onRideStarted(decodedText);
-      },
-      (error) => {
-        // Silently handle frame errors
-      }
-    );
-  };
+  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
-    // Automatically prompt browser for camera permission on load
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
-      .then((stream) => {
-        setHasPermission(true);
-        // Stop initial test stream so html5-qrcode can take over
-        stream.getTracks().forEach((track) => track.stop());
-        startScanner();
-      })
+    const qrCodeId = 'qr-reader';
+    const html5Qrcode = new Html5Qrcode(qrCodeId);
+    html5QrcodeRef.current = html5Qrcode;
+
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+    // Request environment (back) camera directly and keep it running
+    html5Qrcode
+      .start(
+        { facingMode: 'environment' },
+        config,
+        (decodedText) => {
+          // Stop camera scanning once a code is successfully captured
+          html5Qrcode.stop().then(() => {
+            if (onScanSuccess) onScanSuccess(decodedText);
+            if (onRideStarted) onRideStarted(decodedText);
+          });
+        },
+        (errorMessage) => {
+          // Silently ignore frame parse errors while scanning
+        }
+      )
       .catch((err) => {
-        console.error('Camera permission denied or unavailable:', err);
-        setScanError('Camera permission was denied. Please allow camera access in your browser settings.');
+        console.error('Camera access error:', err);
+        setScanError('Unable to start camera. Please ensure camera permissions are granted.');
       });
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch((err) => console.error(err));
+      if (html5QrcodeRef.current && html5QrcodeRef.current.isScanning) {
+        html5QrcodeRef.current.stop().catch((err) => console.error(err));
       }
     };
-  }, []);
+  }, [onScanSuccess, onRideStarted]);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 bg-slate-900 rounded-xl border border-slate-800 text-white">
       <h3 className="text-lg font-bold mb-2">Scan Cycle QR Code</h3>
       <p className="text-sm text-slate-400 mb-4">Point your camera at the QR code on the cycle</p>
 
-      <div id="qr-reader" className="w-full max-w-sm rounded-lg overflow-hidden text-slate-900" />
+      <div id="qr-reader" className="w-full max-w-sm rounded-lg overflow-hidden" />
 
       {scanError && (
         <div className="mt-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm text-center">
